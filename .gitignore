@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# Debug Folders
+**/x64/*
+**/v16/*
+
+# Filters
+*.filters
+*.user
+*.vcxproj
+./vs
