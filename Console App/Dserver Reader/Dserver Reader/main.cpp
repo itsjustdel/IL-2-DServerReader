@@ -1,20 +1,16 @@
-// Dserver Reader.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
 
 #include <iostream>
 #include "ProcessTools.h"
 
 LPCVOID FindFunctions() 
-{
-	
+{	
 	wchar_t* exeName = (wchar_t*)L"Il-2.exe";
 	int processID = GetProcID(exeName);
 
 	//Get handle by OpenProcess
-	HANDLE hProcessIL2 = OpenProcess(PROCESS_ALL_ACCESS, false, processID); //PROCESS_ALL_ACCESS needed to create code cave
+	HANDLE hProcessIL2 = OpenProcess(PROCESS_ALL_ACCESS, false, processID);
 	if (hProcessIL2 == 0)
 		return 0;
-
 
 	//RSE.dll
 	MODULEENTRY32W moduleRSE = GetModule(processID, (wchar_t*)L"RSE.dll");
