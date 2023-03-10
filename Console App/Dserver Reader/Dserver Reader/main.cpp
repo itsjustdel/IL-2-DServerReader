@@ -1,6 +1,12 @@
 using namespace std;
 #include <iostream>
+#include <vector>
 #include "ProcessTools.h"
+
+class Plane {
+public:
+	string model;
+};
 
 char originalLine[8];
 HANDLE hProcess;
@@ -89,7 +95,7 @@ bool WriteCodeCave()
 		//push rbx
 		0x53,
 		//push rdx
-		0x52,		
+		0x52,
 		//push r8
 		0x41, 0x50,
 		//push r9
@@ -161,7 +167,7 @@ bool WriteCodeCave()
 		//inc r9
 		0x49, 0xFF, 0xC1,
 		//jmp
-		0xEB, 0xDC,		
+		0xEB, 0xDC,
 		//pop r10
 		0x41, 0x5A,
 		//pop r9
@@ -171,19 +177,19 @@ bool WriteCodeCave()
 		//pop rdx
 		0x5A,
 		//pop rbx
-		0x5B		
+		0x5B
 	};
 	//write bytes array
 	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)), &bytes, sizeof(bytes), &bytesWritten);
 	totalWritten += bytesWritten;
-	
+
 	//jump to return address
 	BYTE jump = 0xE9;
 	//write 0x09 (jmp) 
 	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+bytesWritten), &jump, sizeof(jump), &bytesWritten);
 	totalWritten += bytesWritten;
 	//bytes written takes us back to start of function
-	DWORD returnAddress = (uintptr_t)(src - ((uintptr_t)codeCaveAddress + (totalWritten -2)));
+	DWORD returnAddress = (uintptr_t)(src - ((uintptr_t)codeCaveAddress + (totalWritten - 2)));
 	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+totalWritten), &returnAddress, sizeof(returnAddress), &bytesWritten);
 
 	return 0;
@@ -253,6 +259,28 @@ bool FindCodeCave()
 	return 0;
 }
 
+string PlaneModel(LPVOID structStart)
+{
+	//string starts at 7b from pointer 
+	LPVOID addressToRead = (LPVOID)((uintptr_t)(structStart)+0x7B);
+
+	//read string stored at "structStart"
+	char rawData[64];
+	ReadProcessMemory(hProcess, addressToRead, &rawData, 64, NULL);
+	string model;
+
+	for (size_t i = 0; i < 64; i++)
+	{
+		//look for null terminated string
+		if (rawData[i] == 0x00)
+			break;
+
+		model.push_back(rawData[i]);
+
+	}
+	return model;
+}
+
 void main()
 {
 	//The plan:
@@ -290,24 +318,35 @@ void main()
 		return;
 	}
 
+
+
 	while (true) {
 
-		//offset in cave, four addresses to read for each plane
-		//first engine is + 0x280 from cave, 2nd 0x188..etc
-
-		LPVOID addressToRead = (LPVOID)((uintptr_t)(codeCaveAddress)+0x100);		
+		//read plane count
+		LPVOID addressToRead = (LPVOID)((uintptr_t)(codeCaveAddress)+0x100);
 		const size_t sizeOfData = sizeof(int);
 		char rawData[sizeOfData];
 		ReadProcessMemory(hProcess, addressToRead, &rawData, sizeOfData, NULL);
-
 		int planeCount = *reinterpret_cast<int*>(rawData);
-
 		std::cout << "Planes: " << planeCount << endl;
-		Sleep(1000);
 
+		//read plane data
+		vector<Plane> planes;
+		LPCVOID pointerToPlane;
+		for (size_t i = 0; i < planeCount; i++)
+		{
+			//read our plane list array stored in DServer memory to get pointer to each plane
+			ReadProcessMemory(hProcess, (LPCVOID)((uintptr_t)codeCaveAddress + 0x120 + i * 8), &pointerToPlane, sizeof(LPCVOID), 0);
+
+			Plane plane = Plane();
+			plane.model = PlaneModel((LPVOID)pointerToPlane);
+			planes.push_back(plane);
+
+			std::cout << plane.model << endl;
+		}
+
+		Sleep(1000);
 	}
 
 	return;
 }
-
-//set player presence rcx is plane struct
