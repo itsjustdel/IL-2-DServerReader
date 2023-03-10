@@ -24,7 +24,7 @@ bool FindFunctions()
 	if (moduleRSE.dwSize == 0)
 		return 1;
 
-	aeroplaneClearAddress = PointerToFunction("init@CAeroplane", hProcess, moduleRSE);
+	aeroplaneClearAddress = PointerToFunction("clear@CAeroplane", hProcess, moduleRSE);
 
 	if (aeroplaneClearAddress != 0) {
 		return 0;
@@ -52,7 +52,7 @@ bool Injection()
 	LPVOID rA = (LPVOID)relativeAddress;
 	WriteProcessMemory(hProcess, (LPVOID)(src + 0x01), &relativeAddress, sizeof(DWORD), &bytesWritten);
 	//we need to add a nope to pad out memory so we jump back at same point we left
-	BYTE nops[3] = { 0x90, 0x90, 0x90 };
+	BYTE nops[1] = { 0x90 };
 	//add a nop
 	WriteProcessMemory(hProcess, (LPVOID)(src + 0x01 + sizeof(DWORD)), &nops, sizeof(nops), &bytesWritten);
 
@@ -67,15 +67,29 @@ bool WriteCodeCave()
 	//cave - where we put our own code alongside the original
 	size_t bytesWritten = 0;
 
-	BYTE cmp[178] = {
+	//check for player plane
+	uintptr_t toPlaneArray = (uintptr_t)codeCaveAddress + 0x120;
+	//unpack to bytes
+	BYTE relBytesPlaneArray[4];
+	for (size_t i = 0; i < 4; i++)
+		relBytesPlaneArray[i] = toPlaneArray >> (i * 8);
+
+	uintptr_t toTempArray = (uintptr_t)codeCaveAddress + 0x1024;
+	//unpack to bytes
+	BYTE relBytesTempArray[4];
+	for (size_t i = 0; i < 4; i++)
+		relBytesTempArray[i] = toTempArray >> (i * 8);
+
+	const int byteArraySize = 173;
+	BYTE bytes[byteArraySize] = {
 		//push r14 (original line)
 		0x41, 0x56,
 		//sub rsp, 30 (original line)
 		0x48, 0x83 ,0xEC ,0x30,
-		//push rdx
-		0x52,
 		//push rbx
 		0x53,
+		//push rdx
+		0x52,		
 		//push r8
 		0x41, 0x50,
 		//push r9
@@ -88,8 +102,8 @@ bool WriteCodeCave()
 		0x48, 0x83, 0xF8, 0x00,
 		//jne
 		0x0F,0x85, 0x1A, 0x00, 0x00, 0x00,
-		//lea, [r8*8 + codecave addy +1024]
-		0x4A, 0x8D, 0x1C, 0xD5, 0x24, 0x10, 0x97, 0x00,
+		//lea, [r8*8 + codecave addy +120]
+		0x4A, 0x8D, 0x1C, 0xC5, relBytesPlaneArray[0], relBytesPlaneArray[1], relBytesPlaneArray[2], relBytesPlaneArray[3],
 		//mov [rbx], rcx
 		0x48, 0x89, 0x0B,
 		//inc r8
@@ -104,10 +118,10 @@ bool WriteCodeCave()
 		0x49, 0xBA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		//cmp r8, r9
 		0x4D, 0x39, 0xC8,
-		//jmp
+		//je
 		0x0F, 0x84, 0x33, 0x00, 0x00, 0x00,
-		//lea rbx,[r9*8+codecave addy +1024]
-		0x4A, 0x8D, 0x1C, 0xCD, 0x24, 0x10, 0x97, 0x00,
+		//lea rbx,[r9*8+codecave addy +120]
+		0x4A, 0x8D, 0x1C, 0xCD, relBytesPlaneArray[0], relBytesPlaneArray[1], relBytesPlaneArray[2], relBytesPlaneArray[3],
 		//cmp rcx, rbx
 		0x48, 0x39, 0xD9,
 		//jne
@@ -133,9 +147,9 @@ bool WriteCodeCave()
 		//je
 		0x0F, 0x84,	0x13, 0x00, 0x00, 0x00,
 		//lea
-		0x4A, 0x8D, 0x1C, 0xCD, 0x00, 0x02, 0xC2, 0x07,
+		0x4A, 0x8D, 0x1C, 0xCD,  relBytesTempArray[0], relBytesTempArray[1], relBytesTempArray[2], relBytesTempArray[3],
 		//lea
-		0x4A, 0x8D, 0x14, 0xCD, 0x20, 0x01, 0xC2, 0x07,
+		0x4A, 0x8D, 0x14, 0xCD, relBytesPlaneArray[0], relBytesPlaneArray[1], relBytesPlaneArray[2], relBytesPlaneArray[3],
 		//inc r9
 		0x49, 0xFF, 0xC1,
 		//pop r10
@@ -144,40 +158,23 @@ bool WriteCodeCave()
 		0x41, 0x59,
 		//pop r8
 		0x41, 0x58,
-		//pop rbx
-		0x5B,
 		//pop rdx
 		0x5A,
-		//jmp to Areoplane.clear()
-		0xE9, 0x74, 0x42, 0xF1, 0xF9
+		//pop rbx
+		0x5B
+		
 	};
-
-	//first of all write the original function back in
-	//and write orignal back in after our code
-	WriteProcessMemory(hProcess, codeCaveAddress, &originalLine, 8, &bytesWritten);//5 is enough for the jump plus address
+	//write bytes array
+	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)), &bytes, sizeof(bytes), &bytesWritten);
 	totalWritten += bytesWritten;
-
-	//only read address from rcx if rax == 0
-	BYTE cmp[4] = { 0x48, 0x83, 0xF8, 0x00 };///???? player is 01, all is 00
-	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+totalWritten), cmp, sizeof(cmp), &bytesWritten);
-	totalWritten += bytesWritten;
-
-	//jump short if equal - 
-	BYTE je[2] = { 0x74, 0x07 };///???? player is 01, all is 00
-	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+totalWritten), je, sizeof(je), &bytesWritten);
-	totalWritten += bytesWritten;
-	//copy rcx to code cave plus 200 - Use cheat engine to view the assembly
-	BYTE rcxToMem[7] = { 0x48, 0x89, 0x0D, 0xEB, 0x01, 0x00, 0x00 };
-	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+totalWritten), rcxToMem, sizeof(rcxToMem), &bytesWritten);
-	totalWritten += bytesWritten;
-
+	
 	//jump to return address
 	BYTE jump = 0xE9;
 	//write 0x09 (jmp) 
-	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+totalWritten), &jump, sizeof(jump), &bytesWritten);
+	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+bytesWritten), &jump, sizeof(jump), &bytesWritten);
 	totalWritten += bytesWritten;
-	//bytes written takes us back to start of "GetPlaneType" function, and we want to jump in at +8 
-	DWORD returnAddress = (uintptr_t)(src - ((uintptr_t)codeCaveAddress + (totalWritten - 4)));//+4, ...still trial and error for this
+	//bytes written takes us back to start of function
+	DWORD returnAddress = (uintptr_t)(src - ((uintptr_t)codeCaveAddress + (totalWritten -2)));
 	WriteProcessMemory(hProcess, (LPVOID)((uintptr_t)(codeCaveAddress)+totalWritten), &returnAddress, sizeof(returnAddress), &bytesWritten);
 
 	return 0;
@@ -282,6 +279,23 @@ void main()
 	if (Injection() != 0) {
 		std::cout << "Error Injecting";
 		return;
+	}
+
+	while (true) {
+
+		//offset in cave, four addresses to read for each plane
+		//first engine is + 0x280 from cave, 2nd 0x188..etc
+
+		LPVOID addressToRead = (LPVOID)((uintptr_t)(codeCaveAddress)+0x100);		
+		const size_t sizeOfData = sizeof(int);
+		char rawData[sizeOfData];
+		ReadProcessMemory(hProcess, addressToRead, &rawData, sizeOfData, NULL);
+
+		int planeCount = *reinterpret_cast<int*>(rawData);
+
+		std::cout << "Planes: " << planeCount << endl;
+		Sleep(1000);
+
 	}
 
 	return;
