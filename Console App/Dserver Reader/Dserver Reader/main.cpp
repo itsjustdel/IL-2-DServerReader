@@ -350,3 +350,30 @@ void main()
 
 	return;
 }
+//setdrawargument
+//checknetanimation rsi = dynamic struct, rcx = plane struct -- 
+
+//this is the only time i can find the real/net 
+//dynamic body struct with the planetype struct register
+//downsides is it runs constantly where aeroplane.clear is only on start and end of mission
+//so need to check if planetype matches and then populate Plane class with dynamic body struct address, (in asm? - how)
+
+//cengine:netobject simulate rsi = dynamic body struct - nothin happens on server for this
+
+//inipopintertoanimation rcx = plane model struct --is it?
+
+//dynamic  = 7791B07A
+
+//line after MPlane -go to rcx - 4th line, 3rd slot, has name of plane in luascript.text
+
+//MissionManager.MissionManagerSpace::MCU_TR_Entity::MCU_TR_Entity - 48 89 4C 24 08        - mov [rsp+08],rcx -- RCX is dynamic body
+																												//RSI+ + 250 has a plane name
+																													//rax on ret is dyn body
+
+//MissionManager.MissionManagerSpace::MPlane::MPlane - 4C 8B DC              - mov r11,rsp - fires at start of mission
+//-- 3rd memory addres top line, player name?
+
+//MissionManager.MissionManagerSpace::MCU_TR_Entity::MCU_TR_Entity - 48 89 4C 24 08        - mov [rsp+08],rcx - read rcx for dyn body - second overload of function? there's two
+// just need to fidn a way to get a player name or identifier of some sort to populate the list?
+
+//MissionManager.MissionManagerSpace::MCU_TR_Entity::setMissionObjectID - 89 91 E8000000        - mov [rcx+000000E8],edx -another options read RCX for dyn. body
